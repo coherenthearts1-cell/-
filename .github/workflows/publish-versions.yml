@@ -1,0 +1,30 @@
+name: Publish recorded phone versions
+on:
+  push:
+    branches: [main]
+    paths:
+      - release-index.json
+      - .github/workflows/publish-versions.yml
+      - scripts/publish_releases.py
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: phone-version-publishing
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate transfer and deletion safeguards
+        run: python -m unittest discover -s tests -v
+      - name: Create tags and downloadable version archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/publish_releases.py
