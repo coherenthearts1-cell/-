@@ -2,6 +2,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import sys
 from pathlib import Path
 import tempfile
 import threading
@@ -12,6 +13,7 @@ from unittest.mock import patch
 
 TMP = tempfile.TemporaryDirectory()
 os.environ['PHONE_ARCHIVE_DATA'] = str(Path(TMP.name) / 'data')
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 spec = importlib.util.spec_from_file_location('archive_app', Path(__file__).resolve().parents[1] / 'app.py')
 app = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(app)
@@ -157,7 +159,7 @@ class ArchiveTests(unittest.TestCase):
 
 
 class HTTPTests(unittest.TestCase):
-    def request(self, path, token=None, origin=None, method='POST'):
+    def request(self, path, token=None, origin=None, method='POST', data=None):
         from io import BytesIO
         from email.message import Message
         from types import SimpleNamespace
@@ -165,13 +167,14 @@ class HTTPTests(unittest.TestCase):
         handler.server = SimpleNamespace(server_port=8765)
         handler.headers = Message()
         handler.headers['Host'] = '127.0.0.1:8765'
-        handler.headers['Content-Length'] = '2'
+        body = json.dumps(data or {}).encode('utf-8')
+        handler.headers['Content-Length'] = str(len(body))
         if token is not None:
             handler.headers['X-App-Token'] = token
         if origin:
             handler.headers['Origin'] = origin
         handler.path = path
-        handler.rfile = BytesIO(b'{}')
+        handler.rfile = BytesIO(body)
         handler.wfile = BytesIO()
         result = {}
         handler.send_response = lambda code: result.update(code=code)
@@ -193,6 +196,27 @@ class HTTPTests(unittest.TestCase):
     def test_other_origin_is_rejected_even_with_token(self):
         code, _ = self.request('/api/status', app.TOKEN, 'https://example.com')
         self.assertEqual(code, 403)
+
+    def test_ai_requires_explicit_consent(self):
+        app.JOB['running'] = False
+        with patch.object(app, 'start_job') as job:
+            code, _ = self.request('/api/analyze', app.TOKEN, data={'key':'secret','consent':False})
+            self.assertEqual(code,400)
+            job.assert_not_called()
+
+    def test_workspace_never_exposes_api_key(self):
+        code, body = self.request('/api/workspace', app.TOKEN)
+        self.assertEqual(code,200)
+        data = json.loads(body)
+        self.assertIn('default_prompt',data)
+        self.assertNotIn('key',data)
+
+    def test_uninstall_requires_package_specific_confirmation(self):
+        app.JOB['running'] = False
+        with patch.object(app, 'start_job') as job:
+            code, _ = self.request('/api/manage-app',app.TOKEN,data={'action':'uninstall','value':'com.example.app','confirmation':'YES'})
+            self.assertEqual(code,400)
+            job.assert_not_called()
 
     def test_authenticated_status_works(self):
         code, body = self.request('/api/status', app.TOKEN)

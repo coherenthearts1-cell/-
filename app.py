@@ -13,6 +13,7 @@ import time
 import urllib.request
 import webbrowser
 import zipfile
+import phone_services as services
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PurePosixPath
@@ -27,6 +28,9 @@ ADB = BASE / 'platform-tools' / ('adb.exe' if os.name == 'nt' else 'adb')
 DEVICE = None
 JOB = {'running': False, 'message': 'آماده', 'done': 0, 'total': 0, 'errors': []}
 LOCK = threading.Lock()
+EXTRA = {'report': '', 'report_id': '', 'report_path': '', 'analysis': '', 'analysis_id': '',
+         'analysis_path': '', 'models': [], 'models_id': ''}
+
 
 
 @contextmanager
@@ -366,6 +370,78 @@ def export_history():
     return path
 
 
+def create_report(device):
+    with LOCK:
+        EXTRA.update(report='', report_id=secrets.token_hex(8), report_path='', analysis='', analysis_id=secrets.token_hex(8), analysis_path='')
+    text = services.collect_report(shell, device, now(), progress, time.sleep)
+    folder = DATA / 'reports'
+    folder.mkdir(exist_ok=True)
+    path = folder / ('Phone-Report-' + time.strftime('%Y%m%d-%H%M%S') + '-' + secrets.token_hex(3) + '.txt')
+    path.write_text(text, encoding='utf-8-sig')
+    with LOCK:
+        EXTRA.update(report=text, report_id=secrets.token_hex(8), report_path=str(path))
+    progress('گزارش آماده و روی کامپیوتر ذخیره شد؛ پیش از ارسال به گوگل آن را بررسی کنید.', len(services.DIAGNOSTICS), len(services.DIAGNOSTICS))
+
+
+def load_models(key):
+    progress('در حال دریافت فهرست مدل‌ها از گوگل؛ هیچ گزارشی ارسال نمی‌شود.')
+    models = services.list_models(key)
+    with LOCK:
+        EXTRA.update(models=models, models_id=secrets.token_hex(8))
+    progress('فهرست مدل‌ها دریافت شد؛ مدل مناسب را انتخاب کنید.')
+
+
+def run_analysis(key, model, report, prompt, symptoms):
+    with LOCK:
+        EXTRA.update(analysis='', analysis_id=secrets.token_hex(8), analysis_path='')
+    progress('گزارش در حال تحلیل توسط Gemini است؛ هیچ تغییری روی گوشی انجام نمی‌شود.')
+    text = services.analyze_report(key, model, report, prompt, symptoms)
+    folder = DATA / 'reports'
+    folder.mkdir(exist_ok=True)
+    path = folder / ('Gemini-Analysis-' + time.strftime('%Y%m%d-%H%M%S') + '-' + secrets.token_hex(3) + '.txt')
+    path.write_text(text, encoding='utf-8-sig')
+    with LOCK:
+        EXTRA.update(analysis=text, analysis_id=secrets.token_hex(8), analysis_path=str(path))
+    progress('پاسخ Gemini آماده شد؛ از بخش تحلیل آن را بخوانید. پیشنهادها خودکار اجرا نمی‌شوند.')
+
+
+def third_party_apps(device):
+    output = shell('pm list packages -3', device)
+    return sorted(line.strip().removeprefix('package:') for line in output.splitlines()
+                  if re.fullmatch(r'package:[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+', line.strip()))
+
+
+def manage_app(device, action, value):
+    if action == 'uninstall':
+        if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+', value):
+            raise ValueError('نام بسته نامعتبر است.')
+        if value not in third_party_apps(device):
+            raise ValueError('حذف برنامه سیستمی یا بسته خارج از فهرست برنامه‌های کاربر مجاز نیست.')
+        progress('در حال حذف برنامه انتخاب‌شده: ' + value)
+        result = adb(['uninstall', value], device, 180)
+    elif action == 'install':
+        path = Path(value)
+        if not path.is_absolute() or not path.is_file() or path.suffix.lower() != '.apk':
+            raise ValueError('یک فایل APK معتبر با مسیر کامل انتخاب کنید.')
+        progress('در حال نصب APK؛ برنامه موجود جایگزین نمی‌شود.')
+        result = adb(['install', str(path)], device, 300)
+    else:
+        raise ValueError('عملیات برنامه نامعتبر است.')
+    if 'Success' not in result.splitlines():
+        raise ValueError('عملیات کامل نشد: ' + result[:800])
+    progress('عملیات برنامه با موفقیت انجام شد؛ برای نمایش تغییرات فهرست برنامه‌ها را تازه کنید.')
+
+
+def push_file(device, local, remote):
+    path = Path(local)
+    if not path.is_absolute() or not path.is_file():
+        raise ValueError('یک فایل موجود با مسیر کامل در کامپیوتر انتخاب کنید.')
+    remote = remote_path(remote)
+    progress('در حال کپی فایل کامپیوتر به گوشی؛ اتصال را قطع نکنید.')
+    adb(['push', str(path), remote], device, 1800)
+    progress('ارسال فایل به گوشی تمام شد؛ برای دیدن آن پوشه گوشی را دوباره پویش کنید.')
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *_):
         pass
@@ -422,12 +498,43 @@ class Handler(BaseHTTPRequestHandler):
                     rows = [dict(r) for r in c.execute('SELECT remote,local,size,verified_at,deleted_at,present FROM files WHERE device=? ORDER BY remote', (device['id'],))
                             if r['remote'].startswith(folder.rstrip('/') + '/')]
                 return self.respond({'files': rows})
+            if route == '/api/workspace':
+                with LOCK:
+                    snapshot = dict(EXTRA)
+                snapshot['default_prompt'] = services.DEFAULT_PROMPT
+                return self.respond(snapshot)
             with LOCK:
                 if JOB['running']:
                     raise ValueError('تا پایان عملیات فعلی صبر کنید.')
             if route == '/api/connect':
                 return self.respond(connect())
-            if route == '/api/tools':
+            if route == '/api/diagnose':
+                start_job(create_report, require_device())
+            elif route == '/api/models':
+                start_job(load_models, services.validate_key(data.get('key')))
+            elif route == '/api/analyze':
+                if data.get('consent') is not True:
+                    raise ValueError('ابتدا رضایت ارسال گزارش به گوگل را تأیید کنید.')
+                start_job(run_analysis, services.validate_key(data.get('key')), data.get('model'),
+                          data.get('report'), data.get('prompt'), data.get('symptoms', ''))
+            elif route == '/api/apps':
+                return self.respond({'apps': third_party_apps(require_device())})
+            elif route == '/api/manage-app':
+                action, value = data.get('action'), data.get('value')
+                expected = 'UNINSTALL ' + str(value) if action == 'uninstall' else 'INSTALL'
+                if action not in ['install', 'uninstall'] or data.get('confirmation') != expected:
+                    raise ValueError('تأیید عملیات برنامه صحیح نیست.')
+                start_job(manage_app, require_device(), action, value)
+            elif route == '/api/push':
+                if data.get('confirmation') != 'PUSH':
+                    raise ValueError('تأیید ارسال فایل صحیح نیست.')
+                start_job(push_file, require_device(), data.get('local'), data.get('remote'))
+            elif route == '/api/phone-settings':
+                actions = {'storage': 'android.settings.INTERNAL_STORAGE_SETTINGS', 'apps': 'android.settings.APPLICATION_SETTINGS'}
+                if data.get('kind') not in actions:
+                    raise ValueError('تنظیمات نامعتبر است.')
+                shell('am start -a ' + actions[data['kind']], require_device())
+            elif route == '/api/tools':
                 start_job(install_tools)
             elif route == '/api/scan':
                 start_job(scan, require_device(), remote_path(data.get('folder', '/sdcard')))
@@ -451,7 +558,9 @@ class Handler(BaseHTTPRequestHandler):
                 os.startfile(str(dest))
             elif route == '/api/pick-destination':
                 # Separate process keeps Tk on its own main thread.
-                code = 'import tkinter as t;from tkinter import filedialog;r=t.Tk();r.withdraw();r.attributes("-topmost",True);print(filedialog.askdirectory(title="Select archive folder"));r.destroy()'
+                kind = data.get('kind', 'folder')
+                picker = 'askdirectory' if kind == 'folder' else 'askopenfilename'
+                code = 'import tkinter as t;from tkinter import filedialog;r=t.Tk();r.withdraw();r.attributes("-topmost",True);print(filedialog.' + picker + '(title="Select folder or file"));r.destroy()'
                 import sys
                 p = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, encoding='utf-8', env=dict(os.environ, PYTHONIOENCODING='utf-8'), timeout=180)
                 if p.returncode:
