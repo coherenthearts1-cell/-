@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 import tempfile
 import threading
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, expect
 
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root))
@@ -50,20 +50,20 @@ with tempfile.TemporaryDirectory() as folder:
             page.on('pageerror',lambda e:errors.append(str(e)))
             page.route('**/api/**',intercept)
             page.goto(f'http://127.0.0.1:{server.server_port}/')
-            page.wait_for_function("document.getElementById('ai-prompt').value.length > 0")
+            expect(page.locator('#ai-prompt')).not_to_have_value('')
             page.get_by_role('button',name='ساخت گزارش عملکرد گوشی',exact=True).focus()
             page.keyboard.press('Enter')
-            page.wait_for_function("document.getElementById('report-text').value.length > 0")
+            expect(page.locator('#report-text')).not_to_have_value('', timeout=15000)
             page.locator('#gemini-key').fill('test-key-not-real')
             page.locator('#get-models').click()
             page.wait_for_selector('#model-choice option[value="gemini-test"]',state='attached')
             page.locator('#model-choice').select_option('gemini-test')
             page.locator('#ai-consent').check()
             page.locator('#analyze').click()
-            page.wait_for_function("document.getElementById('analysis-text').value.length > 0")
+            expect(page.locator('#analysis-text')).not_to_have_value('', timeout=15000)
             assert page.locator('#analysis-text').input_value() == 'تحلیل آزمایشی؛ فقط پیشنهاد'
             assert not any(path in ('push','manage-app','delete') for path,_ in sent)
-            assert 'test-key-not-real' not in page.evaluate('JSON.stringify(localStorage)')
+            assert 'test-key-not-real' not in json.dumps(page.context.storage_state())
             page.locator('#get-apps').click()
             page.wait_for_selector('#app-choice option[value="com.example.fixture"]',state='attached')
             page.locator('#uninstall').click()
