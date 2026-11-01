@@ -39,6 +39,7 @@ try {
     Write-Host 'Android phone performance check - read only'
     Write-Host 'No messages, photos, contacts, files, location, or device serial are collected.'
     Write-Host 'The report includes app/process names that are running or consuming resources.'
+    Write-Host 'Extended report includes installed app names, battery-use counters, and storage statistics.'
     Write-Host 'Keep the phone connected and unlocked. Do not run during a call or payment.'
     Write-Host 'Use the phone normally before running; do not restart it just for this check.'
     if (-not (Test-Path -LiteralPath $adbPath)) {
@@ -59,7 +60,7 @@ try {
     if ($state.Code -ne 0 -or $state.Text.Trim() -ne 'device') {
         throw 'No single authorized USB phone found. Check the data cable, USB debugging and authorization. Disconnect other Android devices. A Samsung USB driver may be needed. No report created.'
     }
-    @('PHONE PERFORMANCE REPORT v1', ('Report time (PC local): ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')), 'Read-only diagnostics; no remediation was performed.', 'App/process names may appear. Review this file before sharing.', 'Unsupported or permission-denied sections are normal on some Android versions.', 'This is a snapshot, not a full hardware test or malware scan.') |
+    @('PHONE PERFORMANCE REPORT v2', ('Report time (PC local): ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')), 'Read-only diagnostics; no remediation was performed.', 'App/process names may appear. Review this file before sharing.', 'Unsupported or permission-denied sections are normal on some Android versions.', 'This is a snapshot, not a full hardware test or malware scan.') |
         Out-File -LiteralPath $reportPath -Encoding utf8
     Add-Section 'Manufacturer' '-d shell getprop ro.product.manufacturer'
     Add-Section 'Model' '-d shell getprop ro.product.model'
@@ -78,6 +79,12 @@ try {
     Add-Section 'Thermal status (0 none; higher values indicate throttling severity)' '-d shell dumpsys thermalservice'
     Add-Section 'CPU usage by process, sample 1' '-d shell dumpsys cpuinfo'
     Add-Section 'Memory use by process (summary)' '-d shell dumpsys meminfo --oom'
+    Add-Section 'Third-party installed packages and installer sources' '-d shell pm list packages -3 -i'
+    Add-Section 'Disabled packages' '-d shell pm list packages -d'
+    Add-Section 'Storage service performance statistics' '-d shell dumpsys diskstats'
+    Add-Section 'Battery use since last charge (app names and counters)' '-d shell dumpsys batterystats --charged'
+    Add-Section 'Graphics frame performance summary' '-d shell dumpsys gfxinfo'
+    Add-Section 'CPU frequency and throttling service summary' '-d shell dumpsys hardware_properties'
     Write-Host 'Waiting for a second CPU sample (5 seconds).'
     Start-Sleep -Seconds 5
     Add-Section 'CPU usage by process, sample 2' '-d shell dumpsys cpuinfo'
