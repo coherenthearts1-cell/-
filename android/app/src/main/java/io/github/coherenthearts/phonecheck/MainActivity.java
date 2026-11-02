@@ -23,7 +23,7 @@ public class MainActivity extends Activity {
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);state=(AppState)getApplication();
         scroll=new ScrollView(this);scroll.setFillViewport(true);column=new LinearLayout(this);column.setOrientation(LinearLayout.VERTICAL);column.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);column.setPadding(dp(18),dp(18),dp(18),dp(32));scroll.addView(column);setContentView(scroll);
-        if(Build.VERSION.SDK_INT>=30){scroll.setOnApplyWindowInsetsListener((v,insets)->{android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.ime());column.setPadding(dp(18)+bars.left,dp(12)+bars.top,dp(18)+bars.right,dp(24)+bars.bottom);return insets;});}
+        if(Build.VERSION.SDK_INT>=30){scroll.setOnApplyWindowInsetsListener((v,insets)->{android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.ime());scroll.setPadding(bars.left,bars.top,bars.right,bars.bottom);return insets;});}
         heading("عیب‌یاب مستقل گوشی — نسخه ۵ آزمایشی",true);
         text("بدون کامپیوتر و روت. گزارش فقط سنجه‌های مجاز اندروید را می‌خواند؛ محدودیت‌ها در گزارش نوشته می‌شوند. این برنامه فایل یا برنامه‌ای را حذف نمی‌کند و به جای تو تنظیمات را تغییر نمی‌دهد.");
         status=text("آماده");status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);error=text("");error.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_ASSERTIVE);
@@ -57,7 +57,7 @@ public class MainActivity extends Activity {
         consent=new CheckBox(this);consent.setText("گزارش، توضیح و پرامپت بالا را بررسی کرده‌ام و با ارسال به Gemini گوگل موافقم");column.addView(consent);
         button("ارسال گزارش و دریافت تحلیل فارسی",()->{
             if(!consent.isChecked()){showError("قبل از ارسال، گزارش را بررسی و گزینه رضایت را علامت بزن.");return;}
-            if(report.getText().toString().trim().isEmpty()||!ReportRules.validModel(model.getText().toString().trim())){showError("ابتدا گزارش بساز و یک نام مدل معتبر انتخاب کن.");return;}
+            if(report.getText().toString().trim().isEmpty()||!ReportRules.validModel(model.getText().toString().trim().replaceFirst("^models/",""))){showError("ابتدا گزارش بساز و یک نام مدل معتبر انتخاب کن.");return;}
             hideKeyboard();state.analyze(key.getText().toString(),model.getText().toString().trim(),report.getText().toString(),prompt.getText().toString(),symptoms.getText().toString());
         },true);
         answer=edit("پاسخ مدل؛ فقط پیشنهاد، بدون اجرای دستور",12,100000,false);answer.setKeyListener(null);answer.setTextIsSelectable(true);answerNote=text("");

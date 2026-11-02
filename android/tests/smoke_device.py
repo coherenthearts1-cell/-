@@ -12,13 +12,20 @@ def nodes():
 def find(text):
     return next((n for n in nodes() if n.get('text')==text),None)
 def click(text):
-    for _ in range(40):
+    size=adb('shell','wm','size')
+    width,height=map(int,re.findall(r'(\d+)x(\d+)',size)[-1])
+    for _ in range(45):
         n=find(text)
         if n is not None:
             x1,y1,x2,y2=map(int,re.findall(r'\d+',n.get('bounds')))
-            if x2>x1 and y2>y1:
-                adb('shell','input','tap',str((x1+x2)//2),str((y1+y2)//2));return
-        adb('shell','input','swipe','500','1500','500','450','300');time.sleep(.3)
+            # UIAutomator may expose partially clipped buttons behind system navigation.
+            # Scroll a complete button into the safe viewport before tapping.
+            if y2-y1>=80 and y1>=80 and y2<=height-140 and n.get('enabled')=='true':
+                print('Click',text,(x1,y1,x2,y2),flush=True)
+                adb('shell','input','tap',str((x1+x2)//2),str((y1+y2)//2));time.sleep(.5);return
+            if y1<80:
+                adb('shell','input','swipe',str(width//2),str(height//3),str(width//2),str(height*2//3),'300');time.sleep(.4);continue
+        adb('shell','input','swipe',str(width//2),str(height*4//5),str(width//2),str(height//4),'300');time.sleep(.4)
     raise AssertionError('Control not reachable: '+text)
 def main():
     adb('shell','am','force-stop',APP)

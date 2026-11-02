@@ -40,7 +40,7 @@ public class AppState extends Application {
     });}
     public void getModels(String key){start("در حال دریافت مدل‌ها از گوگل؛ گزارشی ارسال نمی‌شود",()->{models=GeminiClient.models(key);status="فهرست مدل‌ها دریافت شد؛ انتخاب کن.";});}
     public void analyze(String key,String model,String text,String prompt,String symptoms){start("گزارش با تأیید تو به Gemini فرستاده می‌شود؛ در حال انتظار پاسخ",()->{
-        analysis="";save("last_analysis.txt","");String answer=GeminiClient.analyze(key,model,text,prompt,symptoms);save("last_analysis.txt",answer);analysis=answer;analysisPath="پاسخ در حافظه خصوصی ذخیره شد؛ قابل کپی یا صدور است.";status="پاسخ آماده شد؛ پیشنهادها خودکار اجرا نمی‌شوند.";
+        save("last_analysis.txt","");analysis="";save("last_report.txt",text);report=text;reportPath="این نسخه از گزارش برای تحلیل ارسال شد.";String answer=GeminiClient.analyze(key,model,text,prompt,symptoms);save("last_analysis.txt",answer);analysis=answer;analysisPath="پاسخ در حافظه خصوصی ذخیره شد؛ قابل کپی یا صدور است.";status="پاسخ آماده شد؛ پیشنهادها خودکار اجرا نمی‌شوند.";
     });}
     public synchronized void monitor(int seconds,boolean apps,boolean usage){
         if(busy)return;monitoring=true;stopMonitor=false;
