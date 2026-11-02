@@ -134,8 +134,8 @@ public class MainActivity extends Activity {
  }
  private void monitorDialog(){
   LinearLayout box=dialogBox();TextView help=new TextView(this);help.setText("برنامه را باز نگه دار. با خروج از آن، پایش متوقف و نتیجه جزئی ذخیره می‌شود.");help.setTextSize(16);box.addView(help);
-  RadioGroup group=new RadioGroup(this);String[] labels={"۱ دقیقه","۳ دقیقه","۵ دقیقه"};for(int i=0;i<3;i++){RadioButton b=new RadioButton(this);b.setId(1000+i);b.setText(labels[i]);b.setMinHeight(dp(52));group.addView(b);}group.check(1000);box.addView(group);
-  new AlertDialog.Builder(this).setTitle("پایش در همین صفحه").setView(wrap(box)).setNegativeButton("انصراف",null).setPositiveButton("شروع پایش",(d,w)->{int chosen=group.getCheckedRadioButtonId()-1000;awaitingReport=true;state.monitor(new int[]{60,180,300}[chosen],prefs.getBoolean("apps",false),prefs.getBoolean("usage",false));}).show();
+  RadioGroup group=new RadioGroup(this);int[] ids={View.generateViewId(),View.generateViewId(),View.generateViewId()};String[] labels={"۱ دقیقه","۳ دقیقه","۵ دقیقه"};for(int i=0;i<3;i++){RadioButton b=new RadioButton(this);b.setId(ids[i]);b.setText(labels[i]);b.setMinHeight(dp(52));group.addView(b);}group.check(ids[0]);box.addView(group);
+  new AlertDialog.Builder(this).setTitle("پایش در همین صفحه").setView(wrap(box)).setNegativeButton("انصراف",null).setPositiveButton("شروع پایش",(d,w)->{int chosen=0;for(int i=0;i<ids.length;i++)if(ids[i]==group.getCheckedRadioButtonId())chosen=i;awaitingReport=true;state.monitor(new int[]{60,180,300}[chosen],prefs.getBoolean("apps",false),prefs.getBoolean("usage",false));}).show();
  }
  private LinearLayout dialogBox(){LinearLayout b=new LinearLayout(this);b.setOrientation(LinearLayout.VERTICAL);b.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);b.setPadding(dp(20),dp(4),dp(20),dp(12));return b;}
  private ScrollView wrap(LinearLayout b){ScrollView s=new ScrollView(this);s.addView(b);return s;}
