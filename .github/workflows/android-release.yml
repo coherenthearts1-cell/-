@@ -1,0 +1,35 @@
+name: Publish Android diagnostic APK
+on:
+  workflow_run:
+    workflows: ['Build standalone Android diagnostics']
+    types: [completed]
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Publish verified experimental APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          tag='android-v5.0.0-beta.1'
+          if gh release view "$tag" --repo "$REPO" >/dev/null 2>&1; then
+            echo 'Existing release is left unchanged.'
+            exit 0
+          fi
+          mkdir apk
+          gh run download "$RUN_ID" --repo "$REPO" --name Phone-Check-Android-v5.0.0-beta.1 --dir apk
+          mv apk/app-debug.apk PhoneCheck-Android-v5.0.0-beta.1.apk
+          sha256sum PhoneCheck-Android-v5.0.0-beta.1.apk > SHA256SUMS.txt
+          cat > notes.md <<'NOTES'
+          نسخه مستقل اندروید، بدون کامپیوتر و روت، برای اندروید ۸ و جدیدتر. گزارش فضای ذخیره‌سازی، حافظه، باتری، دما، وضعیت حرارتی، اتصال و اطلاعات عمومی سیستم؛ آمار برنامه‌ها اختیاری است. پایش پیش‌زمینه کوتاه‌مدت، صدور گزارش و تحلیل اختیاری Gemini با کلید شخصی و رضایت ارسال در همان رابط وجود دارد. تغییر تنظیمات فقط در صفحه رسمی اندروید و با اقدام کاربر انجام می‌شود.
+
+          این APK آزمایشی با امضای debug است، نه انتشار فروشگاهی. تست واحد، بررسی lint و آزمون شبیه‌ساز انجام شده؛ TalkBack واقعی، مدل‌های متنوع گوشی و کلید واقعی Gemini هنوز آزمایش نشده‌اند. برنامه سلامت کامل سخت‌افزار، مصرف دقیق همه برنامه‌ها یا همه مشکلات گوشی را تضمین نمی‌کند. هیچ فایل یا برنامه‌ای را حذف نمی‌کند. برای راهنمای فارسی پوشه android را ببینید. گزارش‌ها پیش از حذف یا نصب مجدد برنامه باید در فایل دلخواه صادر شوند.
+          NOTES
+          gh release create "$tag" PhoneCheck-Android-v5.0.0-beta.1.apk SHA256SUMS.txt --repo "$REPO" --target "$SOURCE_SHA" --title 'نسخه اندروید مستقل — ۵ آزمایشی' --notes-file notes.md --prerelease --latest=false
