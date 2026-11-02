@@ -104,7 +104,22 @@ public class MainActivity extends Activity {
     private void hideKeyboard(){android.view.inputmethod.InputMethodManager im=(android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);if(getCurrentFocus()!=null)im.hideSoftInputFromWindow(getCurrentFocus().getWindowToken(),0);}
     private void copy(String label,String value){if(value.trim().isEmpty()){showError("متنی برای کپی وجود ندارد.");return;}((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText(label,value));Toast.makeText(this,"کپی شد",Toast.LENGTH_SHORT).show();}
     private void export(String text,String name){if(text.trim().isEmpty()){showError("متنی برای ذخیره وجود ندارد.");return;}state.pendingExport=text;Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,name);startActivityForResult(i,100);}
-    @Override public void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==100&&result==RESULT_OK&&data!=null&&data.getData()!=null){try(OutputStream out=getContentResolver().openOutputStream(data.getData(),"wt")){if(out==null)throw new java.io.IOException();out.write(state.pendingExport.getBytes(StandardCharsets.UTF_8));Toast.makeText(this,"فایل ذخیره شد",Toast.LENGTH_LONG).show();}catch(Exception e){showError("ذخیره فایل انجام نشد؛ مقصد را بررسی کن.");}finally{state.pendingExport="";}}}
+    @Override public void onActivityResult(int request,int result,Intent data){
+        super.onActivityResult(request,result,data);
+        if(request!=100)return;
+        if(result!=RESULT_OK||data==null||data.getData()==null){state.pendingExport="";return;}
+        String text=state.pendingExport;state.pendingExport="";
+        if(text.isEmpty()){showError("متن صادرشده دیگر در حافظه نیست؛ دوباره دکمه ذخیره فایل را بزن.");return;}
+        Uri uri=data.getData();
+        boolean started=state.start("در حال ذخیره فایل انتخابی",()->{
+            try(OutputStream out=state.getContentResolver().openOutputStream(uri,"wt")){
+                if(out==null)throw new java.io.IOException("ذخیره فایل انجام نشد.");
+                out.write(text.getBytes(StandardCharsets.UTF_8));
+            }
+            state.status="فایل در مقصد انتخابی ذخیره شد.";
+        });
+        if(!started)showError("تا پایان عملیات جاری صبر کن و دوباره ذخیره فایل را بزن.");
+    }
     private void settingsButton(String title,String action){button(title,()->confirmSettings("فقط صفحه رسمی تنظیمات باز می‌شود. تغییر را خودت در اندروید بررسی و تأیید کن.",new Intent(action)),false);}
     private void confirmSettings(String message,Intent intent){new AlertDialog.Builder(this).setTitle("باز کردن تنظیمات با اجازه تو").setMessage(message).setNegativeButton("انصراف",null).setPositiveButton("باز کردن تنظیمات",(d,w)->{try{startActivity(intent);}catch(ActivityNotFoundException e){showError("این صفحه روی گوشی تو وجود ندارد؛ از تنظیمات اصلی گوشی وارد شو.");}}).show();}
 }
