@@ -39,13 +39,17 @@ public class MainActivity extends Activity {
   LinearLayout navigation=new LinearLayout(this);navigation.setBackgroundColor(Color.WHITE);root.addView(navigation);
   String[] names={"بررسی گوشی","گزارش و پیشنهادها","تنظیمات"};for(int i=0;i<3;i++){final int target=i;Button b=new Button(this);b.setText(names[i]);b.setAllCaps(false);b.setTextSize(14);b.setMinHeight(dp(64));navigation.addView(b,new LinearLayout.LayoutParams(0,-2,1));b.setOnClickListener(v->navigate(target));tabs[i]=b;}
   if(Build.VERSION.SDK_INT>=30)root.setOnApplyWindowInsetsListener((v,insets)->{android.graphics.Insets b=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.ime());root.setPadding(b.left,b.top,b.right,b.bottom);return insets;});
+  if(Build.VERSION.SDK_INT>=33)getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,this::handleBack);
   showPage();
  }
  @Override protected void onResume(){super.onResume();state.listener=this::refresh;refresh();}
  @Override protected void onPause(){state.listener=null;super.onPause();}
  @Override protected void onStop(){if(state.monitoring)state.stopMonitor=true;super.onStop();}
  @Override public void onSaveInstanceState(Bundle out){out.putInt("page",page);super.onSaveInstanceState(out);}
- @Override public void onBackPressed(){if(page!=HOME)navigate(HOME);else super.onBackPressed();}
+ // Legacy Android dispatches back through this method; API 33+ uses the registered dispatcher.
+ @android.annotation.SuppressLint("GestureBackNavigation")
+ @Override public void onBackPressed(){if(Build.VERSION.SDK_INT<33)handleBack();else super.onBackPressed();}
+ private void handleBack(){if(page!=HOME)navigate(HOME);else finish();}
  private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
  private void headingFlag(TextView t){if(Build.VERSION.SDK_INT>=28)t.setAccessibilityHeading(true);}
  private GradientDrawable background(int fill,int border){GradientDrawable d=new GradientDrawable();d.setColor(fill);d.setCornerRadius(dp(14));if(border!=0)d.setStroke(dp(1),border);return d;}
@@ -128,7 +132,11 @@ public class MainActivity extends Activity {
   LinearLayout box=dialogBox();TextView explain=new TextView(this);explain.setText("متن گزارش فعلی، توضیح تو و پرامپت به Gemini گوگل ارسال می‌شود. ممکن است هزینه داشته باشد. پاسخ فقط پیشنهاد است و اقدامی اجرا نمی‌کند.");explain.setTextSize(16);box.addView(explain);EditText problem=field(box,"چه مشکلی احساس می‌کنی؟",draftSymptoms,4,false);problem.setFilters(new InputFilter[]{new InputFilter.LengthFilter(8000)});
   new AlertDialog.Builder(this).setTitle("گزارش به گوگل ارسال شود؟").setView(wrap(box)).setNegativeButton("انصراف",null).setPositiveButton("موافقم؛ ارسال و تحلیل",(d,w)->{draftSymptoms=problem.getText().toString();hideKeyboard();state.analyze(savedKey,selected,draftReport,customPrompt,draftSymptoms);}).show();
  }
- private void monitorDialog(){String[] choices={"۱ دقیقه","۳ دقیقه","۵ دقیقه"};final int[] chosen={0};new AlertDialog.Builder(this).setTitle("پایش در همین صفحه").setMessage("برنامه را باز نگه دار. با خروج از آن، پایش متوقف و نتیجه جزئی ذخیره می‌شود.").setSingleChoiceItems(choices,0,(d,n)->chosen[0]=n).setNegativeButton("انصراف",null).setPositiveButton("شروع پایش",(d,w)->{awaitingReport=true;state.monitor(new int[]{60,180,300}[chosen[0]],prefs.getBoolean("apps",false),prefs.getBoolean("usage",false));}).show();}
+ private void monitorDialog(){
+  LinearLayout box=dialogBox();TextView help=new TextView(this);help.setText("برنامه را باز نگه دار. با خروج از آن، پایش متوقف و نتیجه جزئی ذخیره می‌شود.");help.setTextSize(16);box.addView(help);
+  RadioGroup group=new RadioGroup(this);String[] labels={"۱ دقیقه","۳ دقیقه","۵ دقیقه"};for(int i=0;i<3;i++){RadioButton b=new RadioButton(this);b.setId(1000+i);b.setText(labels[i]);b.setMinHeight(dp(52));group.addView(b);}group.check(1000);box.addView(group);
+  new AlertDialog.Builder(this).setTitle("پایش در همین صفحه").setView(wrap(box)).setNegativeButton("انصراف",null).setPositiveButton("شروع پایش",(d,w)->{int chosen=group.getCheckedRadioButtonId()-1000;awaitingReport=true;state.monitor(new int[]{60,180,300}[chosen],prefs.getBoolean("apps",false),prefs.getBoolean("usage",false));}).show();
+ }
  private LinearLayout dialogBox(){LinearLayout b=new LinearLayout(this);b.setOrientation(LinearLayout.VERTICAL);b.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);b.setPadding(dp(20),dp(4),dp(20),dp(12));return b;}
  private ScrollView wrap(LinearLayout b){ScrollView s=new ScrollView(this);s.addView(b);return s;}
  private void settingsButton(String label,String action){button(label,()->confirmSettings("فقط صفحه رسمی تنظیمات باز می‌شود؛ هر تغییر را خودت بررسی و تأیید می‌کنی.",new Intent(action)),false,false);}
@@ -139,7 +147,7 @@ public class MainActivity extends Activity {
   boolean changedReport=!Objects.equals(observedReport,state.report),changedAnswer=!Objects.equals(observedAnalysis,state.analysis);
   if(changedReport){observedReport=state.report;draftReport=state.report;}
   if(changedAnswer)observedAnalysis=state.analysis;
-  if(!state.busy&&awaitingReport){awaitingReport=false;if(changedReport&&!state.report.isEmpty()){page=RESULTS;showPage();scroll.scrollTo(0,0);return;}}
+  if(!state.busy&&awaitingReport){awaitingReport=false;if(changedReport&&!state.report.isEmpty()){page=RESULTS;showPage();scroll.scrollTo(0,0);column.post(()->screenTitle.performAccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS,null));return;}}
   if(changedAnswer&&page==RESULTS&&!state.busy){showPage();return;}
   String message=notice.isEmpty()?state.status:notice;if(!status.getText().toString().equals(message))status.setText(message);
   if(!error.getText().toString().equals(state.error)){error.setText(state.error);error.setVisibility(state.error.isEmpty()?View.GONE:View.VISIBLE);}
