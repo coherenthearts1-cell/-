@@ -6,8 +6,8 @@ android {
         applicationId 'io.github.coherenthearts.phonecheck'
         minSdk 26
         targetSdk 36
-        versionCode 50001
-        versionName '5.0.0-beta.1'
+        versionCode 50101
+        versionName '5.1.0-beta.1'
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     buildTypes {

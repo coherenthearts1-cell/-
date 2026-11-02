@@ -24,12 +24,17 @@ jobs:
           gradle-version: '8.13'
       - name: Install Android platform
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Restore experimental signing identity
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: phonecheck-debug-signing-v1
       - name: Test, lint, and build APK
         working-directory: android
         run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: Phone-Check-Android-v5.0.0-beta.1
+          name: Phone-Check-Android-v5.1.0-beta.1
           path: android/app/build/outputs/apk/debug/app-debug.apk
       - name: Enable emulator acceleration
         run: |
@@ -52,3 +57,4 @@ jobs:
           name: Android-build-test-reports
           path: |
             android/app/build/reports/
+            android/test-output/
