@@ -12,7 +12,7 @@ def nodes():
 def find(text):
     return next((n for n in nodes() if n.get('text')==text),None)
 def click(text):
-    for _ in range(20):
+    for _ in range(40):
         n=find(text)
         if n is not None:
             x1,y1,x2,y2=map(int,re.findall(r'\d+',n.get('bounds')))
@@ -20,23 +20,33 @@ def click(text):
                 adb('shell','input','tap',str((x1+x2)//2),str((y1+y2)//2));return
         adb('shell','input','swipe','500','1500','500','450','300');time.sleep(.3)
     raise AssertionError('Control not reachable: '+text)
-adb('shell','am','force-stop',APP)
-adb('shell','am','start','-W','-n',APP+'/.MainActivity')
-time.sleep(2)
-click('ساخت گزارش جدید')
-for _ in range(15):
-    text=adb('shell','run-as',APP,'cat','files/last_report.txt') if subprocess.run(['adb','shell','run-as',APP,'ls','files/last_report.txt'],capture_output=True).returncode==0 else ''
-    if 'گزارش مستقل اندروید' in text:break
-    time.sleep(1)
-else:raise AssertionError('No generated report')
-assert 'محدودیت‌های صریح' in text
-assert 'IMEI' in text and 'در دسترس نیستند' in text
-assert 'RAM' in text
-# No setting change without native confirmation.
-click('تنظیمات فضای ذخیره‌سازی')
-assert find('باز کردن تنظیمات با اجازه تو') is not None
-click('انصراف')
-# Check absence of fatal app crashes after actions.
-crashes=adb('logcat','-d','-b','crash','-t','100')
-assert APP not in crashes,crashes
-print('Emulator smoke passed: launch, report generation, and settings cancellation.')
+def main():
+    adb('shell','am','force-stop',APP)
+    adb('shell','am','start','-W','-n',APP+'/.MainActivity')
+    time.sleep(2)
+    click('ساخت گزارش جدید')
+    for _ in range(15):
+        text=adb('shell','run-as',APP,'cat','files/last_report.txt') if subprocess.run(['adb','shell','run-as',APP,'ls','files/last_report.txt'],capture_output=True).returncode==0 else ''
+        if 'گزارش مستقل اندروید' in text:break
+        time.sleep(1)
+    else:raise AssertionError('No generated report')
+    assert 'محدودیت‌های صریح' in text
+    assert 'IMEI' in text and 'در دسترس نیستند' in text
+    assert 'RAM' in text
+    # No setting change without native confirmation.
+    click('تنظیمات فضای ذخیره‌سازی')
+    assert find('باز کردن تنظیمات با اجازه تو') is not None
+    click('انصراف')
+    # Check absence of fatal app crashes after actions.
+    crashes=adb('logcat','-d','-b','crash','-t','100')
+    assert APP not in crashes,crashes
+    print('Emulator smoke passed: launch, report generation, and settings cancellation.')
+
+try:
+    main()
+except Exception:
+    print('CURRENT UI:', adb('shell','uiautomator','dump','/sdcard/failure.xml'))
+    print(adb('shell','cat','/sdcard/failure.xml'))
+    print('APP FILES:', adb('shell','run-as',APP,'ls','-la','files'))
+    print('CRASH LOG:', adb('logcat','-d','-b','crash','-t','100'))
+    raise
